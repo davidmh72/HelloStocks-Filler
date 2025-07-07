@@ -16,13 +16,13 @@
   </style>
 </head>
 <body>
-  <h2>Stock Data Lookup - v3</h2>
+  <h2>Stock Data Lookup - v4</h2>
   <p>Paste CSV table with stock data. Missing fields will be fetched or added.</p>
   <p><b>Lower Risk:</b> Ticker,Company Name,Criteria Passed,% Passed,1Yr Earnings Growth (ttm),1Yr Sales Growth (ttm),5Yr Sales Growth,Debt to Equity,Free Cash Flow,PEG Ratio,Return on Equity,Score</p>
   <p><b>Balanced Risk:</b> Ticker,Company Name,Criteria Passed,% Passed,1Yr Sales Growth (ttm),5Yr Earnings Growth,5Yr Sales Growth,Debt to Equity,Free Cash Flow,PEG Ratio,Return on Equity,Score</p>
   <p><b>Full Throttle:</b> Ticker,Company Name,Criteria Passed,% Passed,1Yr Sales Growth (ttm),5Yr Sales Growth,Debt to Equity,PEG Ratio,Score</p>
-  <textarea id="inputTable" placeholder="PINS,Pinterest Inc.,7/7,100%,17.8%,219.1%,0.03,0.54,10
-NVDA,NVIDIA Corporation,6/7,86%,86.2%,1095.1%,0.12,1.67,9"></textarea>
+  <textarea id="inputTable" placeholder="PINSPinterest, Inc.7/7100%39%18%219%0.03$853.94 Million0.5448%10
+NVDANvidia Corporation6/786%44%86%1095%0.12$21.23 Billion1.6748%9"></textarea>
   <div>
     <input id="dateInput" type="date" style="margin: 10px; padding: 5px;">
     <select id="strategySelect" style="margin: 10px; padding: 5px;">
@@ -62,41 +62,89 @@ NVDA,NVIDIA Corporation,6/7,86%,86.2%,1095.1%,0.12,1.67,9"></textarea>
     }
 
     function parseCSV(csv) {
-      // Better CSV parsing that handles commas within quoted fields
-      const rows = [];
       const lines = csv.trim().split('\n');
+      const rows = [];
       
       for (let line of lines) {
-        const row = [];
-        let current = '';
-        let inQuotes = false;
+        line = line.trim();
+        if (!line) continue;
         
-        for (let i = 0; i < line.length; i++) {
-          const char = line[i];
+        // Check if it's comma-separated CSV
+        if (line.includes(',')) {
+          // Standard CSV parsing
+          const row = [];
+          let current = '';
+          let inQuotes = false;
           
-          if (char === '"' && (i === 0 || line[i-1] === ',')) {
-            inQuotes = true;
-          } else if (char === '"' && inQuotes && (i === line.length - 1 || line[i+1] === ',')) {
-            inQuotes = false;
-          } else if (char === ',' && !inQuotes) {
-            row.push(current.trim());
-            current = '';
-          } else {
-            current += char;
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            
+            if (char === '"' && (i === 0 || line[i-1] === ',')) {
+              inQuotes = true;
+            } else if (char === '"' && inQuotes && (i === line.length - 1 || line[i+1] === ',')) {
+              inQuotes = false;
+            } else if (char === ',' && !inQuotes) {
+              row.push(current.trim());
+              current = '';
+            } else {
+              current += char;
+            }
           }
+          row.push(current.trim());
+          rows.push(row);
+        } else {
+          // Parse concatenated format like "PINSPinterest, Inc.7/7100%39%18%219%0.03$853.94 Million0.5448%10"
+          const row = [];
+          
+          // Extract ticker (first 2-5 uppercase letters)
+          const tickerMatch = line.match(/^([A-Z]{2,5})/);
+          if (!tickerMatch) continue;
+          
+          const ticker = tickerMatch[1];
+          row.push(ticker);
+          
+          let remaining = line.substring(ticker.length);
+          
+          // Extract company name (text before the first number/fraction)
+          const companyMatch = remaining.match(/^([^0-9\/]+)/);
+          const company = companyMatch ? companyMatch[1].trim() : '';
+          row.push(company);
+          
+          remaining = remaining.substring(company.length);
+          
+          // Extract criteria passed (format like "7/7" or "6/7")
+          const criteriaMatch = remaining.match(/^(\d+\/\d+)/);
+          const criteria = criteriaMatch ? criteriaMatch[1] : '';
+          row.push(criteria);
+          
+          remaining = remaining.substring(criteria.length);
+          
+          // Extract percentage (format like "100%")
+          const percentMatch = remaining.match(/^(\d+%)/);
+          const percent = percentMatch ? percentMatch[1] : '';
+          row.push(percent);
+          
+          remaining = remaining.substring(percent.length);
+          
+          // Extract remaining numeric values and percentages
+          const values = [];
+          const valueMatches = remaining.match(/(-?\d+\.?\d*%?|\$[\d,.]+ [A-Z][a-z]+)/g);
+          if (valueMatches) {
+            values.push(...valueMatches);
+          }
+          
+          row.push(...values);
+          rows.push(row);
         }
-        row.push(current.trim());
-        rows.push(row);
       }
       
       // Auto-detect if first row contains headers or data
       const firstRow = rows[0];
       let hasHeaders = false;
       
-      // Check if first row looks like headers (contains non-numeric values in expected positions)
+      // Check if first row looks like headers
       if (firstRow.length > 0) {
         const firstCell = firstRow[0].trim().replace(/^"|"$/g, '');
-        // If first cell doesn't look like a ticker symbol, assume it's headers
         if (firstCell.toLowerCase().includes('ticker') || firstCell.toLowerCase().includes('symbol') || 
             firstRow.some(cell => cell.toLowerCase().includes('company') || cell.toLowerCase().includes('name'))) {
           hasHeaders = true;
@@ -198,8 +246,12 @@ NVDA,NVIDIA Corporation,6/7,86%,86.2%,1095.1%,0.12,1.67,9"></textarea>
       try {
         const { headers, records } = parseCSV(csv);
         
+        // Debug logging
+        appendLog(`Headers found: ${headers.join(', ')}`);
+        appendLog(`First record ticker: "${records[0]?.Ticker}"`);
+        
         // Process all records that have a ticker symbol
-        const validRecords = records.filter(r => r.Ticker && r.Ticker.trim() !== '');
+        const validRecords = records.filter(r => r.Ticker && r.Ticker.trim() !== '' && r.Ticker.trim().length <= 10);
 
         if (!validRecords.length) {
           appendLog('No valid records with ticker symbols found.');
@@ -215,7 +267,7 @@ NVDA,NVIDIA Corporation,6/7,86%,86.2%,1095.1%,0.12,1.67,9"></textarea>
 
         for (let i = 0; i < validRecords.length; i++) {
           const record = validRecords[i];
-          const ticker = record.Ticker;
+          const ticker = record.Ticker.trim();
           appendLog(`Processing ${ticker} (${i + 1}/${validRecords.length}) for ${date}...`);
 
           try {
