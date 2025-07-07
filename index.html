@@ -1,339 +1,351 @@
-```html
-   <!DOCTYPE html>
-   <html lang="en">
-   <head>
-     <meta charset="UTF-8">
-     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-     <title>Stock Data Lookup</title>
-     <style>
-       body { font-family: Arial, sans-serif; padding: 20px; max-width: 1200px; margin: auto; }
-       textarea { width: 100%; height: 200px; margin: 10px 0; }
-       button { padding: 10px 20px; margin: 10px 0; }
-       select { margin: 10px; padding: 5px; }
-       #resultDiv { border: 1px solid #ccc; padding: 10px; max-height: 300px; overflow-y: auto; }
-       table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-       th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-       th { background-color: #f2f2f2; }
-     </style>
-   </head>
-   <body>
-     <h2>Stock Data Lookup</h2>
-     <p>Paste CSV table with strategy-specific columns (see below). Missing fields will be fetched or added.</p>
-     <p><b>Lower Risk:</b> Ticker,Company Name,Criteria Passed,% Passed,1Yr Earnings Growth (ttm),1Yr Sales Growth (ttm),5Yr Sales Growth,Debt to Equity,Free Cash Flow,PEG Ratio,Return on Equity,Score</p>
-     <p><b>Balanced Risk:</b> Ticker,Company Name,Criteria Passed,% Passed,1Yr Sales Growth (ttm),5Yr Earnings Growth,5Yr Sales Growth,Debt to Equity,Free Cash Flow,PEG Ratio,Return on Equity,Score</p>
-     <p><b>Full Throttle:</b> Ticker,Company Name,Criteria Passed,% Passed,1Yr Sales Growth (ttm),5Yr Sales Growth,Debt to Equity,PEG Ratio,Score</p>
-     <textarea id="inputTable" placeholder="Ticker,Company Name,Criteria Passed,% Passed,1Yr Sales Growth (ttm),5Yr Sales Growth,Debt to Equity,PEG Ratio,Score\nPINS,Pinterest, Inc.,7/7,100%,17.8%,219.1%,0.03,0.54,10\nNVDA,NVIDIA Corporation,6/7,86%,86.2%,1095.1%,0.12,1.67,9"></textarea>
-     <div>
-       <input id="dateInput" type="date" style="margin: 10px; padding: 5px;">
-       <select id="strategySelect" style="margin: 10px; padding: 5px;">
-         <option value="Lower Risk">Lower Risk</option>
-         <option value="Balanced Risk">Balanced Risk</option>
-         <option value="Full Throttle">Full Throttle</option>
-       </select>
-       <button id="lookupButton">Lookup and Update</button>
-     </div>
-     <div id="resultDiv"></div>
-     <table id="outputTable"></table>
-     <script>
-       const dateInput = document.getElementById('dateInput');
-       const strategySelect = document.getElementById('strategySelect');
-       const lookupButton = document.getElementById('lookupButton');
-       const resultDiv = document.getElementById('resultDiv');
-       const inputTable = document.getElementById('inputTable');
-       const outputTable = document.getElementById('outputTable');
-       let isProcessing = false;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stock Data Lookup</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 1200px; margin: auto; }
+    textarea { width: 100%; height: 200px; margin: 10px 0; }
+    button { padding: 10px 20px; margin: 10px 0; }
+    select { margin: 10px; padding: 5px; }
+    #resultDiv { border: 1px solid #ccc; padding: 10px; max-height: 300px; overflow-y: auto; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+  </style>
+</head>
+<body>
+  <h2>Stock Data Lookup</h2>
+  <p>Paste CSV table with stock data. Missing fields will be fetched or added.</p>
+  <p><b>Lower Risk:</b> Ticker,Company Name,Criteria Passed,% Passed,1Yr Earnings Growth (ttm),1Yr Sales Growth (ttm),5Yr Sales Growth,Debt to Equity,Free Cash Flow,PEG Ratio,Return on Equity,Score</p>
+  <p><b>Balanced Risk:</b> Ticker,Company Name,Criteria Passed,% Passed,1Yr Sales Growth (ttm),5Yr Earnings Growth,5Yr Sales Growth,Debt to Equity,Free Cash Flow,PEG Ratio,Return on Equity,Score</p>
+  <p><b>Full Throttle:</b> Ticker,Company Name,Criteria Passed,% Passed,1Yr Sales Growth (ttm),5Yr Sales Growth,Debt to Equity,PEG Ratio,Score</p>
+  <textarea id="inputTable" placeholder="PINS,Pinterest Inc.,7/7,100%,17.8%,219.1%,0.03,0.54,10
+NVDA,NVIDIA Corporation,6/7,86%,86.2%,1095.1%,0.12,1.67,9"></textarea>
+  <div>
+    <input id="dateInput" type="date" style="margin: 10px; padding: 5px;">
+    <select id="strategySelect" style="margin: 10px; padding: 5px;">
+      <option value="Lower Risk">Lower Risk</option>
+      <option value="Balanced Risk">Balanced Risk</option>
+      <option value="Full Throttle">Full Throttle</option>
+    </select>
+    <button id="lookupButton">Lookup and Update</button>
+  </div>
+  <div id="resultDiv"></div>
+  <table id="outputTable"></table>
+  <script>
+    const dateInput = document.getElementById('dateInput');
+    const strategySelect = document.getElementById('strategySelect');
+    const lookupButton = document.getElementById('lookupButton');
+    const resultDiv = document.getElementById('resultDiv');
+    const inputTable = document.getElementById('inputTable');
+    const outputTable = document.getElementById('outputTable');
+    let isProcessing = false;
 
-       const ALPHA_VANTAGE_API_KEY = 'CL7LZYDQZLXD7XUO';
-       const FMP_API_KEY = '59fxpu34TwH14sXxgyjU0PULL17ES3fL';
+    const ALPHA_VANTAGE_API_KEY = 'CL7LZYDQZLXD7XUO';
+    const FMP_API_KEY = '59fxpu34TwH14sXxgyjU0PULL17ES3fL';
 
-       const ALL_FIELDS = [
-         'Ticker', 'Company Name', 'Criteria Passed', '% Passed', 
-         '1Yr Earnings Growth (ttm)', '1Yr Sales Growth (ttm)', 
-         '5Yr Earnings Growth', '5Yr Sales Growth', 'Debt to Equity', 
-         'Free Cash Flow', 'PEG Ratio', 'Return on Equity', 'Score', 
-         'Price', 'ForwardEpsGrowth5Yr'
-       ];
+    const ALL_FIELDS = [
+      'Ticker', 'Company Name', 'Criteria Passed', '% Passed', 
+      '1Yr Earnings Growth (ttm)', '1Yr Sales Growth (ttm)', 
+      '5Yr Earnings Growth', '5Yr Sales Growth', 'Debt to Equity', 
+      'Free Cash Flow', 'PEG Ratio', 'Return on Equity', 'Score', 
+      'Price', 'ForwardEpsGrowth5Yr'
+    ];
 
-       function appendLog(message) {
-         const logEntry = document.createElement('div');
-         logEntry.textContent = `[${new Date().toLocaleTimeString()}]: ${message}`;
-         resultDiv.appendChild(logEntry);
-         resultDiv.scrollTop = resultDiv.scrollHeight;
-       }
+    function appendLog(message) {
+      const logEntry = document.createElement('div');
+      logEntry.textContent = `[${new Date().toLocaleTimeString()}]: ${message}`;
+      resultDiv.appendChild(logEntry);
+      resultDiv.scrollTop = resultDiv.scrollHeight;
+    }
 
-       function parseCSV(csv) {
-         const rows = csv.trim().split('\n').map(row => row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/));
-         let headers = rows[0].map(h => h.trim());
-         const records = rows.slice(1).map(row => {
-           const obj = {};
-           headers.forEach((header, i) => obj[header] = row[i] ? row[i].trim().replace(/^"|"$/g, '') : '');
-           return obj;
-         });
+    function parseCSV(csv) {
+      const rows = csv.trim().split('\n').map(row => row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/));
+      
+      // Auto-detect if first row contains headers or data
+      const firstRow = rows[0];
+      let hasHeaders = false;
+      
+      // Check if first row looks like headers (contains non-numeric values in expected positions)
+      if (firstRow.length > 0) {
+        const firstCell = firstRow[0].trim().replace(/^"|"$/g, '');
+        // If first cell doesn't look like a ticker symbol, assume it's headers
+        if (firstCell.toLowerCase().includes('ticker') || firstCell.toLowerCase().includes('symbol') || 
+            firstRow.some(cell => cell.toLowerCase().includes('company') || cell.toLowerCase().includes('name'))) {
+          hasHeaders = true;
+        }
+      }
 
-         // Add missing fields
-         ALL_FIELDS.forEach(field => {
-           if (!headers.includes(field)) {
-             headers.push(field);
-             records.forEach(record => record[field] = field === 'Price' ? '0.00' : '');
-           }
-         });
+      let headers, dataRows;
+      
+      if (hasHeaders) {
+        headers = firstRow.map(h => h.trim().replace(/^"|"$/g, ''));
+        dataRows = rows.slice(1);
+      } else {
+        // Generate default headers based on strategy
+        const strategy = strategySelect.value;
+        if (strategy === 'Lower Risk') {
+          headers = ['Ticker', 'Company Name', 'Criteria Passed', '% Passed', '1Yr Earnings Growth (ttm)', '1Yr Sales Growth (ttm)', '5Yr Sales Growth', 'Debt to Equity', 'Free Cash Flow', 'PEG Ratio', 'Return on Equity', 'Score'];
+        } else if (strategy === 'Balanced Risk') {
+          headers = ['Ticker', 'Company Name', 'Criteria Passed', '% Passed', '1Yr Sales Growth (ttm)', '5Yr Earnings Growth', '5Yr Sales Growth', 'Debt to Equity', 'Free Cash Flow', 'PEG Ratio', 'Return on Equity', 'Score'];
+        } else {
+          headers = ['Ticker', 'Company Name', 'Criteria Passed', '% Passed', '1Yr Sales Growth (ttm)', '5Yr Sales Growth', 'Debt to Equity', 'PEG Ratio', 'Score'];
+        }
+        dataRows = rows;
+      }
 
-         return { headers, records };
-       }
+      const records = dataRows.map(row => {
+        const obj = {};
+        headers.forEach((header, i) => obj[header] = row[i] ? row[i].trim().replace(/^"|"$/g, '') : '');
+        return obj;
+      });
 
-       function renderTable(records, headers) {
-         outputTable.innerHTML = '';
-         const thead = document.createElement('thead');
-         const headerRow = document.createElement('tr');
-         headers.forEach(header => {
-           const th = document.createElement('th');
-           th.textContent = header;
-           headerRow.appendChild(th);
-         });
-         thead.appendChild(headerRow);
-         outputTable.appendChild(thead);
+      // Add missing fields from ALL_FIELDS
+      ALL_FIELDS.forEach(field => {
+        if (!headers.includes(field)) {
+          headers.push(field);
+          records.forEach(record => record[field] = field === 'Price' ? '0.00' : '');
+        }
+      });
 
-         const tbody = document.createElement('tbody');
-         records.forEach(record => {
-           const row = document.createElement('tr');
-           headers.forEach(header => {
-             const td = document.createElement('td');
-             td.textContent = record[header] || '';
-             row.appendChild(td);
-           });
-           tbody.appendChild(row);
-         });
-         outputTable.appendChild(tbody);
-       }
+      return { headers, records };
+    }
 
-       const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+    function renderTable(records, headers) {
+      outputTable.innerHTML = '';
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      headers.forEach(header => {
+        const th = document.createElement('th');
+        th.textContent = header;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      outputTable.appendChild(thead);
 
-       lookupButton.onclick = async () => {
-         if (isProcessing) {
-           appendLog('Processing in progress, please wait.');
-           return;
-         }
-         isProcessing = true;
-         lookupButton.disabled = true;
+      const tbody = document.createElement('tbody');
+      records.forEach(record => {
+        const row = document.createElement('tr');
+        headers.forEach(header => {
+          const td = document.createElement('td');
+          td.textContent = record[header] || '';
+          row.appendChild(td);
+        });
+        tbody.appendChild(row);
+      });
+      outputTable.appendChild(tbody);
+    }
 
-         const date = dateInput.value;
-         const strategy = strategySelect.value;
-         if (!date) {
-           appendLog('Enter date.');
-           isProcessing = false;
-           lookupButton.disabled = false;
-           return;
-         }
+    const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-         const csv = inputTable.value.trim();
-         if (!csv) {
-           appendLog('Paste a valid CSV table.');
-           isProcessing = false;
-           lookupButton.disabled = false;
-           return;
-         }
+    lookupButton.onclick = async () => {
+      if (isProcessing) {
+        appendLog('Processing in progress, please wait.');
+        return;
+      }
+      isProcessing = true;
+      lookupButton.disabled = true;
 
-         resultDiv.textContent = '';
-         appendLog(`Parsing CSV for ${strategy} strategy...`);
+      const date = dateInput.value;
+      const strategy = strategySelect.value;
+      if (!date) {
+        appendLog('Enter date.');
+        isProcessing = false;
+        lookupButton.disabled = false;
+        return;
+      }
 
-         try {
-           const { headers, records } = parseCSV(csv);
-           const filteredRecords = records.filter(r => parseFloat(r.Price) === 0 && r.Date === date);
+      const csv = inputTable.value.trim();
+      if (!csv) {
+        appendLog('Paste a valid CSV table.');
+        isProcessing = false;
+        lookupButton.disabled = false;
+        return;
+      }
 
-           if (!filteredRecords.length) {
-             appendLog(`No records with Price = 0.00 for ${date}.`);
-             isProcessing = false;
-             lookupButton.disabled = false;
-             return;
-           }
+      resultDiv.textContent = '';
+      appendLog(`Parsing CSV for ${strategy} strategy...`);
 
-           appendLog(`Found ${filteredRecords.length} records to process.`);
+      try {
+        const { headers, records } = parseCSV(csv);
+        
+        // Process all records that have a ticker symbol
+        const validRecords = records.filter(r => r.Ticker && r.Ticker.trim() !== '');
 
-           let updatedCount = 0;
-           const errors = [];
+        if (!validRecords.length) {
+          appendLog('No valid records with ticker symbols found.');
+          isProcessing = false;
+          lookupButton.disabled = false;
+          return;
+        }
 
-           for (let i = 0; i < filteredRecords.length; i++) {
-             const record = filteredRecords[i];
-             const ticker = record.Ticker;
-             appendLog(`Processing ${ticker} (${i + 1}/${filteredRecords.length}) for ${date}...`);
+        appendLog(`Found ${validRecords.length} records to process.`);
 
-             try {
-               // Fetch price from Alpha Vantage
-               const avUrl = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${ticker}&apikey=${ALPHA_VANTAGE_API_KEY}`;
-               const avResponse = await fetch(avUrl);
-               const avData = await avResponse.json();
-               if (avData['Error Message'] || avData['Note']) {
-                 const errMsg = avData['Note'] || avData['Error Message'] || 'API error';
-                 errors.push(`${ticker}: ${errMsg}`);
-                 appendLog(`${ticker}: Failed to fetch price - ${errMsg}`);
-                 continue;
-               }
-               const timeSeries = avData['Time Series (Daily)'];
-               if (!timeSeries || !timeSeries[date]) {
-                 errors.push(`${ticker}: No price data on ${date}`);
-                 appendLog(`${ticker}: No price data on ${date}`);
-                 continue;
-               }
-               const price = parseFloat(timeSeries[date]['4. close']).toFixed(2);
-               record.Price = price;
-               appendLog(`${ticker} price: $${price}`);
+        let updatedCount = 0;
+        const errors = [];
 
-               // Fetch financial data from FMP
-               const fmpIncomeUrl = `https://financialmodelingprep.com/api/v3/income-statement/${ticker}?period=annual&limit=5&apikey=${FMP_API_KEY}`;
-               const fmpRatiosUrl = `https://financialmodelingprep.com/api/v3/ratios/${ticker}?period=annual&limit=1&apikey=${FMP_API_KEY}`;
-               const fmpCashFlowUrl = `https://financialmodelingprep.com/api/v3/cash-flow-statement/${ticker}?period=annual&limit=1&apikey=${FMP_API_KEY}`;
-               const fmpEstimatesUrl = `https://financialmodelingprep.com/api/v3/analyst-estimates/${ticker}?apikey=${FMP_API_KEY}`;
+        for (let i = 0; i < validRecords.length; i++) {
+          const record = validRecords[i];
+          const ticker = record.Ticker;
+          appendLog(`Processing ${ticker} (${i + 1}/${validRecords.length}) for ${date}...`);
 
-               // Income statement (earnings and sales growth)
-               const incomeResponse = await fetch(fmpIncomeUrl);
-               if (!incomeResponse.ok) {
-                 errors.push(`${ticker}: FMP income statement error - ${incomeResponse.statusText}`);
-                 appendLog(`${ticker}: Failed to fetch income data - ${incomeResponse.statusText}`);
-               } else {
-                 const incomeData = await incomeResponse.json();
-                 if (incomeData && incomeData.length >= 2) {
-                   const latest = incomeData[0];
-                   const previous = incomeData[1];
-                   // 1Yr Earnings Growth (ttm)
-                   if (!record['1Yr Earnings Growth (ttm)'] && latest.netIncome && previous.netIncome) {
-                     const growth = ((latest.netIncome - previous.netIncome) / Math.abs(previous.netIncome) * 100).toFixed(2);
-                     record['1Yr Earnings Growth (ttm)'] = growth;
-                     appendLog(`${ticker} 1Yr Earnings Growth: ${growth}%`);
-                   }
-                   // 1Yr Sales Growth (ttm)
-                   if (!record['1Yr Sales Growth (ttm)'] && latest.revenue && previous.revenue) {
-                     const growth = ((latest.revenue - previous.revenue) / Math.abs(previous.revenue) * 100).toFixed(2);
-                     record['1Yr Sales Growth (ttm)'] = growth;
-                     appendLog(`${ticker} 1Yr Sales Growth: ${growth}%`);
-                   }
-                   // 5Yr Earnings Growth
-                   if (!record['5Yr Earnings Growth'] && incomeData.length >= 5 && incomeData[4].netIncome) {
-                     const growth = ((latest.netIncome - incomeData[4].netIncome) / Math.abs(incomeData[4].netIncome) * 100 / 5).toFixed(2);
-                     record['5Yr Earnings Growth'] = growth;
-                     appendLog(`${ticker} 5Yr Earnings Growth: ${growth}%`);
-                   }
-                   // 5Yr Sales Growth
-                   if (!record['5Yr Sales Growth'] && incomeData.length >= 5 && incomeData[4].revenue) {
-                     const growth = ((latest.revenue - incomeData[4].revenue) / Math.abs(incomeData[4].revenue) * 100 / 5).toFixed(2);
-                     record['5Yr Sales Growth'] = growth;
-                     appendLog(`${ticker} 5Yr Sales Growth: ${growth}%`);
-                   }
-                 }
-               }
+          try {
+            // Fetch price from Alpha Vantage
+            const avUrl = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${ticker}&apikey=${ALPHA_VANTAGE_API_KEY}`;
+            const avResponse = await fetch(avUrl);
+            const avData = await avResponse.json();
+            if (avData['Error Message'] || avData['Note']) {
+              const errMsg = avData['Note'] || avData['Error Message'] || 'API error';
+              errors.push(`${ticker}: ${errMsg}`);
+              appendLog(`${ticker}: Failed to fetch price - ${errMsg}`);
+              await delay(12000); // Rate limit delay
+              continue;
+            }
+            const timeSeries = avData['Time Series (Daily)'];
+            if (!timeSeries || !timeSeries[date]) {
+              errors.push(`${ticker}: No price data on ${date}`);
+              appendLog(`${ticker}: No price data on ${date}`);
+              await delay(12000); // Rate limit delay
+              continue;
+            }
+            const price = parseFloat(timeSeries[date]['4. close']).toFixed(2);
+            record.Price = price;
+            appendLog(`${ticker} price: $${price}`);
 
-               // Ratios (Debt to Equity, PEG Ratio, ROE)
-               const ratiosResponse = await fetch(fmpRatiosUrl);
-               if (!ratiosResponse.ok) {
-                 errors.push(`${ticker}: FMP ratios error - ${ratiosResponse.statusText}`);
-                 appendLog(`${ticker}: Failed to fetch ratios - ${ratiosResponse.statusText}`);
-               } else {
-                 const ratiosData = await ratiosResponse.json();
-                 if (ratiosData && ratiosData[0]) {
-                   // Debt to Equity
-                   if (!record['Debt to Equity'] && ratiosData[0].debtEquityRatio) {
-                     const debtEquity = parseFloat(ratiosData[0].debtEquityRatio).toFixed(2);
-                     record['Debt to Equity'] = debtEquity;
-                     appendLog(`${ticker} Debt to Equity: ${debtEquity}`);
-                   }
-                   // PEG Ratio
-                   if (!record['PEG Ratio'] && ratiosData[0].pegRatio) {
-                     const peg = parseFloat(ratiosData[0].pegRatio).toFixed(2);
-                     record['PEG Ratio'] = peg;
-                     appendLog(`${ticker} PEG Ratio: ${peg}`);
-                   }
-                   // Return on Equity
-                   if (!record['Return on Equity'] && ratiosData[0].returnOnEquity) {
-                     const roe = (ratiosData[0].returnOnEquity * 100).toFixed(2);
-                     record['Return on Equity'] = roe;
-                     appendLog(`${ticker} Return on Equity: ${roe}%`);
-                   }
-                 }
-               }
+            // Fetch financial data from FMP
+            const fmpIncomeUrl = `https://financialmodelingprep.com/api/v3/income-statement/${ticker}?period=annual&limit=5&apikey=${FMP_API_KEY}`;
+            const fmpRatiosUrl = `https://financialmodelingprep.com/api/v3/ratios/${ticker}?period=annual&limit=1&apikey=${FMP_API_KEY}`;
+            const fmpCashFlowUrl = `https://financialmodelingprep.com/api/v3/cash-flow-statement/${ticker}?period=annual&limit=1&apikey=${FMP_API_KEY}`;
+            const fmpEstimatesUrl = `https://financialmodelingprep.com/api/v3/analyst-estimates/${ticker}?apikey=${FMP_API_KEY}`;
 
-               // Free Cash Flow
-               const cashFlowResponse = await fetch(fmpCashFlowUrl);
-               if (!cashFlowResponse.ok) {
-                 errors.push(`${ticker}: FMP cash flow error - ${cashFlowResponse.statusText}`);
-                 appendLog(`${ticker}: Failed to fetch cash flow - ${cashFlowResponse.statusText}`);
-               } else {
-                 const cashFlowData = await cashFlowResponse.json();
-                 if (cashFlowData && cashFlowData[0] && cashFlowData[0].freeCashFlow) {
-                   if (!record['Free Cash Flow']) {
-                     const fcf = (cashFlowData[0].freeCashFlow / 1000000).toFixed(2) + ' Million';
-                     record['Free Cash Flow'] = fcf;
-                     appendLog(`${ticker} Free Cash Flow: $${fcf}`);
-                   }
-                 }
-               }
+            // Income statement (earnings and sales growth)
+            const incomeResponse = await fetch(fmpIncomeUrl);
+            if (!incomeResponse.ok) {
+              errors.push(`${ticker}: FMP income statement error - ${incomeResponse.statusText}`);
+              appendLog(`${ticker}: Failed to fetch income data - ${incomeResponse.statusText}`);
+            } else {
+              const incomeData = await incomeResponse.json();
+              if (incomeData && incomeData.length >= 2) {
+                const latest = incomeData[0];
+                const previous = incomeData[1];
+                // 1Yr Earnings Growth (ttm)
+                if (!record['1Yr Earnings Growth (ttm)'] && latest.netIncome && previous.netIncome) {
+                  const growth = ((latest.netIncome - previous.netIncome) / Math.abs(previous.netIncome) * 100).toFixed(2);
+                  record['1Yr Earnings Growth (ttm)'] = growth + '%';
+                  appendLog(`${ticker} 1Yr Earnings Growth: ${growth}%`);
+                }
+                // 1Yr Sales Growth (ttm)
+                if (!record['1Yr Sales Growth (ttm)'] && latest.revenue && previous.revenue) {
+                  const growth = ((latest.revenue - previous.revenue) / Math.abs(previous.revenue) * 100).toFixed(2);
+                  record['1Yr Sales Growth (ttm)'] = growth + '%';
+                  appendLog(`${ticker} 1Yr Sales Growth: ${growth}%`);
+                }
+                // 5Yr Earnings Growth
+                if (!record['5Yr Earnings Growth'] && incomeData.length >= 5 && incomeData[4].netIncome) {
+                  const growth = ((latest.netIncome - incomeData[4].netIncome) / Math.abs(incomeData[4].netIncome) * 100 / 5).toFixed(2);
+                  record['5Yr Earnings Growth'] = growth + '%';
+                  appendLog(`${ticker} 5Yr Earnings Growth: ${growth}%`);
+                }
+                // 5Yr Sales Growth
+                if (!record['5Yr Sales Growth'] && incomeData.length >= 5 && incomeData[4].revenue) {
+                  const growth = ((latest.revenue - incomeData[4].revenue) / Math.abs(incomeData[4].revenue) * 100 / 5).toFixed(2);
+                  record['5Yr Sales Growth'] = growth + '%';
+                  appendLog(`${ticker} 5Yr Sales Growth: ${growth}%`);
+                }
+              }
+            }
 
-               // Forward EPS Growth
-               const estimatesResponse = await fetch(fmpEstimatesUrl);
-               if (!estimatesResponse.ok) {
-                 errors.push(`${ticker}: FMP estimates error - ${estimatesResponse.statusText}`);
-                 appendLog(`${ticker}: Failed to fetch EPS - ${estimatesResponse.statusText}`);
-               } else {
-                 const estimatesData = await estimatesResponse.json();
-                 if (!record['ForwardEpsGrowth5Yr'] && estimatesData && estimatesData[0] && estimatesData[0].estimatedEpsGrowth) {
-                   const epsGrowth = (estimatesData[0].estimatedEpsGrowth * 100).toFixed(2);
-                   record['ForwardEpsGrowth5Yr'] = epsGrowth;
-                   appendLog(`${ticker} EPS growth: ${epsGrowth}%`);
-                 }
-               }
+            // Ratios (Debt to Equity, PEG Ratio, ROE)
+            const ratiosResponse = await fetch(fmpRatiosUrl);
+            if (!ratiosResponse.ok) {
+              errors.push(`${ticker}: FMP ratios error - ${ratiosResponse.statusText}`);
+              appendLog(`${ticker}: Failed to fetch ratios - ${ratiosResponse.statusText}`);
+            } else {
+              const ratiosData = await ratiosResponse.json();
+              if (ratiosData && ratiosData.length > 0) {
+                const ratios = ratiosData[0];
+                // Debt to Equity
+                if (!record['Debt to Equity'] && ratios.debtEquityRatio !== null) {
+                  record['Debt to Equity'] = ratios.debtEquityRatio.toFixed(2);
+                  appendLog(`${ticker} Debt to Equity: ${ratios.debtEquityRatio.toFixed(2)}`);
+                }
+                // PEG Ratio
+                if (!record['PEG Ratio'] && ratios.pegRatio !== null) {
+                  record['PEG Ratio'] = ratios.pegRatio.toFixed(2);
+                  appendLog(`${ticker} PEG Ratio: ${ratios.pegRatio.toFixed(2)}`);
+                }
+                // Return on Equity
+                if (!record['Return on Equity'] && ratios.returnOnEquity !== null) {
+                  record['Return on Equity'] = (ratios.returnOnEquity * 100).toFixed(2) + '%';
+                  appendLog(`${ticker} Return on Equity: ${(ratios.returnOnEquity * 100).toFixed(2)}%`);
+                }
+              }
+            }
 
-               updatedCount++;
-               appendLog(`${ticker} updated successfully.`);
+            // Cash Flow (Free Cash Flow)
+            const cashFlowResponse = await fetch(fmpCashFlowUrl);
+            if (!cashFlowResponse.ok) {
+              errors.push(`${ticker}: FMP cash flow error - ${cashFlowResponse.statusText}`);
+              appendLog(`${ticker}: Failed to fetch cash flow - ${cashFlowResponse.statusText}`);
+            } else {
+              const cashFlowData = await cashFlowResponse.json();
+              if (cashFlowData && cashFlowData.length > 0) {
+                const cashFlow = cashFlowData[0];
+                // Free Cash Flow
+                if (!record['Free Cash Flow'] && cashFlow.freeCashFlow !== null) {
+                  record['Free Cash Flow'] = (cashFlow.freeCashFlow / 1000000).toFixed(0) + 'M';
+                  appendLog(`${ticker} Free Cash Flow: ${(cashFlow.freeCashFlow / 1000000).toFixed(0)}M`);
+                }
+              }
+            }
 
-               renderTable(records, headers);
-             } catch (error) {
-               errors.push(`${ticker}: ${error.message}`);
-               appendLog(`${ticker}: Error - ${error.message}`);
-             }
+            // Analyst Estimates (ForwardEpsGrowth5Yr)
+            const estimatesResponse = await fetch(fmpEstimatesUrl);
+            if (!estimatesResponse.ok) {
+              errors.push(`${ticker}: FMP estimates error - ${estimatesResponse.statusText}`);
+              appendLog(`${ticker}: Failed to fetch estimates - ${estimatesResponse.statusText}`);
+            } else {
+              const estimatesData = await estimatesResponse.json();
+              if (estimatesData && estimatesData.length > 0) {
+                const estimates = estimatesData[0];
+                // Forward EPS Growth 5Yr
+                if (!record['ForwardEpsGrowth5Yr'] && estimates.estimatedEpsGrowth !== null) {
+                  record['ForwardEpsGrowth5Yr'] = (estimates.estimatedEpsGrowth * 100).toFixed(2) + '%';
+                  appendLog(`${ticker} Forward EPS Growth 5Yr: ${(estimates.estimatedEpsGrowth * 100).toFixed(2)}%`);
+                }
+              }
+            }
 
-             if (i < filteredRecords.length - 1) {
-               appendLog(`Waiting 15s to respect API rate limits...`);
-               await delay(15000);
-             }
-           }
+            updatedCount++;
+            appendLog(`${ticker}: Successfully updated`);
+            await delay(12000); // Rate limit delay
 
-           const dateObj = new Date(date);
-           const quarter = `Q${Math.ceil((dateObj.getMonth() + 1) / 3)} ${dateObj.getFullYear()}`;
-           appendLog(`Completed: ${updatedCount} records updated.`);
-           appendLog(`Errors: ${errors.length ? errors.join('; ') : 'None'}`);
-           appendLog(`Quarter: ${quarter}`);
-           appendLog('Copy the table above to paste into Grist.');
-         } catch (error) {
-           appendLog(`Fatal error: ${error.message}`);
-         } finally {
-           isProcessing = false;
-           lookupButton.disabled = false;
-           appendLog('Processing complete. Button re-enabled.');
-         }
-       };
-     </script>
-   </body>
-   </html>
-   ```
+          } catch (error) {
+            errors.push(`${ticker}: ${error.message}`);
+            appendLog(`${ticker}: Error - ${error.message}`);
+            await delay(12000); // Rate limit delay
+          }
+        }
 
-3. **Enable GitHub Pages**:
-   - Go to your repository’s **Settings** tab.
-   - Scroll to the **Pages** section.
-   - Under **Source**, select **Deploy from a branch**.
-   - Choose **Branch: main** (or `master` if applicable) and **/ (root)** as the folder.
-   - Click **Save**.
-   - Wait a few minutes for GitHub to deploy. You’ll see a URL like `https://<your-username>.github.io/stock-lookup-app/` in the Pages settings.
+        appendLog(`Processing complete. Updated ${updatedCount} records.`);
+        if (errors.length > 0) {
+          appendLog(`Errors: ${errors.join(', ')}`);
+        }
 
-4. **Verify Deployment**:
-   - Visit `https://<your-username>.github.io/stock-lookup-app/`.
-   - Ensure the app loads with a textarea, date input, strategy dropdown (`Lower Risk`, `Balanced Risk`, `Full Throttle`), and a “Lookup and Update” button.
+        renderTable(records, headers);
 
-5. **Use the App**:
-   - **Prepare CSV**:
-     - In Grist, select your `HelloStocksHistory` table, right-click, and choose **Copy as CSV**.
-     - The CSV should match the strategy’s columns:
-       - **Lower Risk**: `Ticker,Company Name,Criteria Passed,% Passed,1Yr Earnings Growth (ttm),1Yr Sales Growth (ttm),5Yr Sales Growth,Debt to Equity,Free Cash Flow,PEG Ratio,Return on Equity,Score`.
-       - **Balanced Risk**: `Ticker,Company Name,Criteria Passed,% Passed,1Yr Sales Growth (ttm),5Yr Earnings Growth,5Yr Sales Growth,Debt to Equity,Free Cash Flow,PEG Ratio,Return on Equity,Score`.
-       - **Full Throttle**: `Ticker,Company Name,Criteria Passed,% Passed,1Yr Sales Growth (ttm),5Yr Sales Growth,Debt to Equity,PEG Ratio,Score`.
-     - Example (for Full Throttle):
-       ```
-       Ticker,Company Name,Criteria Passed,% Passed,1Yr Sales Growth (ttm),5Yr Sales Growth,Debt to Equity,PEG Ratio,Score
-       PINS,Pinterest, Inc.,7/7,100%,17.8%,219
+      } catch (error) {
+        appendLog(`Error: ${error.message}`);
+      }
+
+      isProcessing = false;
+      lookupButton.disabled = false;
+    };
+
+    // Set default date to today
+    dateInput.value = new Date().toISOString().split('T')[0];
+  </script>
+</body>
+</html>
